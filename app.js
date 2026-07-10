@@ -1050,6 +1050,99 @@ async function importJSON(event) {
   event.target.value = '';
 }
 
+// ===== MIGRATE FROM LOCALSTORAGE =====
+async function migrateFromLocalStorage() {
+  const raw = localStorage.getItem('ahorro-v2') || localStorage.getItem('ahorro-state');
+  if (!raw) {
+    showToast('No se encontraron datos anteriores en este navegador');
+    return;
+  }
+
+  let old;
+  try { old = JSON.parse(raw); } catch(e) { showToast('❌ Error leyendo datos locales'); return; }
+
+  const txCount   = old.transactions?.length || 0;
+  const goalCount = old.goals?.length || 0;
+  if (txCount === 0 && goalCount === 0) { showToast('No hay datos para migrar'); return; }
+
+  if (!confirm(`Se encontraron ${txCount} movimientos y ${goalCount} metas.\n¿Subirlos a Supabase ahora?`)) return;
+
+  showLoading();
+  try {
+    // Migrar transacciones
+    if (old.transactions?.length > 0) {
+      const txs = old.transactions.map(t => ({
+        type:        t.type,
+        amount:      Number(t.amount),
+        category:    t.category || 'other',
+        description: t.description || '',
+        date:        t.date,
+        person:      t.person || 'person1',
+        recurring:   t.recurring || false,
+      }));
+      const { error } = await db.from('transactions').insert(txs);
+      if (error) throw error;
+    }
+
+    // Migrar metas
+    for (const g of (old.goals || [])) {
+      const { data: newGoal, error: ge } = await db.from('goals').insert({
+        name:           g.name,
+        icon:           g.icon || '🎯',
+        target_amount:  Number(g.targetAmount || g.target_amount || 0),
+        current_amount: Number(g.currentAmount || g.current_amount || 0),
+        deadline:       g.deadline || null,
+        notes:          g.notes || '',
+      }).select().single();
+      if (ge) throw ge;
+
+      // Migrar aportes de cada meta
+      if (g.contributions?.length > 0 && newGoal) {
+        const contribs = g.contributions.map(c => ({
+          goal_id: newGoal.id,
+          amount:  Number(c.amount),
+          person:  c.person || 'person1',
+          date:    c.date || new Date().toISOString().split('T')[0],
+        }));
+        await db.from('contributions').insert(contribs);
+      }
+    }
+
+    // Migrar presupuestos
+    if (old.budgets && Object.keys(old.budgets).length > 0) {
+      const rows = Object.entries(old.budgets).map(([category, amount]) => ({ category, amount: Number(amount) }));
+      await db.from('budgets').upsert(rows, { onConflict: 'category' });
+    }
+
+    // Migrar ajustes
+    if (old.settings) {
+      await db.from('settings').upsert({
+        id:              'singleton',
+        person1:         old.settings.person1 || 'Yo',
+        person2:         old.settings.person2 || 'Mi Amor',
+        currency:        old.settings.currency || '$',
+        expected_income: Number(old.settings.expectedIncome || old.settings.expected_income || 0),
+        savings_pct:     Number(old.settings.savingsPct || old.settings.savings_pct || 20),
+      }, { onConflict: 'id' });
+    }
+
+    await loadAll();
+    hideLoading();
+
+    // Ocultar tarjeta de migración
+    document.getElementById('migration-card')?.remove();
+    localStorage.removeItem('ahorro-v2');
+    localStorage.removeItem('ahorro-state');
+
+    renderDashboard();
+    showToast(`✅ ${txCount} movimientos migrados a Supabase`, 4000);
+  } catch(e) {
+    hideLoading();
+    showToast('❌ Error durante la migración');
+    console.error(e);
+  }
+}
+
 // ===== MODAL OVERLAY CLOSE =====
 ['modal-tx','modal-goal','modal-contrib','modal-budget'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
