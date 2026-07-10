@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>💕 Nuestros Ahorros</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header class="top-header">
+    <div class="header-left">
+      <span class="header-logo">💕</span>
+      <div class="header-info">
+        <span class="header-title">Nuestros Ahorros</span>
+        <span class="header-subtitle" id="header-date"></span>
+      </div>
+    </div>
+    <div class="header-balance" id="header-balance">$0</div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content" id="main-content">
+
+    <!-- ===== DASHBOARD ===== -->
+    <div id="page-dashboard" class="page active">
+
+      <div class="balance-hero">
+        <p class="hero-label">Balance disponible</p>
+        <h1 class="hero-amount" id="hero-balance">$0</h1>
+        <div class="hero-pills">
+          <span class="pill pill-income"><i class="fas fa-arrow-down"></i> <span id="hero-income">$0</span></span>
+          <span class="pill pill-expense"><i class="fas fa-arrow-up"></i> <span id="hero-expense">$0</span></span>
+          <span class="pill pill-savings"><i class="fas fa-piggy-bank"></i> <span id="hero-savings">$0</span></span>
+        </div>
+      </div>
+
+      <div class="quick-actions">
+        <button class="quick-btn btn-income" onclick="openTxModal('income')">
+          <div class="quick-icon"><i class="fas fa-plus"></i></div>
+          <span>Ingreso</span>
+        </button>
+        <button class="quick-btn btn-expense" onclick="openTxModal('expense')">
+          <div class="quick-icon"><i class="fas fa-minus"></i></div>
+          <span>Gasto</span>
+        </button>
+        <button class="quick-btn btn-savings" onclick="openTxModal('savings')">
+          <div class="quick-icon"><i class="fas fa-piggy-bank"></i></div>
+          <span>Ahorro</span>
+        </button>
+      </div>
+
+      <!-- Budget alert bar -->
+      <div id="budget-alert" class="budget-alert hidden"></div>
+
+      <div class="section-header">
+        <h3>Últimos movimientos</h3>
+        <button class="link-btn" onclick="showPage('transactions')">Ver todos <i class="fas fa-chevron-right"></i></button>
+      </div>
+      <div id="recent-list" class="tx-list"></div>
+
+      <div class="section-header" style="margin-top:20px">
+        <h3>Metas activas</h3>
+        <button class="link-btn" onclick="showPage('goals')">Ver todas <i class="fas fa-chevron-right"></i></button>
+      </div>
+      <div id="dash-goals" class="dash-goals-row"></div>
+
+    </div>
+
+    <!-- ===== TRANSACTIONS ===== -->
+    <div id="page-transactions" class="page">
+      <div class="page-header">
+        <h2>Movimientos</h2>
+        <button class="btn-fab" onclick="openTxModal('expense')"><i class="fas fa-plus"></i></button>
+      </div>
+
+      <div class="filters-bar">
+        <div class="search-wrapper">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="search-input" class="search-input" placeholder="Buscar..." oninput="renderTransactions()">
+        </div>
+        <div class="filters-row">
+          <select id="filter-type" class="filter-chip" onchange="renderTransactions()">
+            <option value="">Todos</option>
+            <option value="income">Ingresos</option>
+            <option value="expense">Gastos</option>
+            <option value="savings">Ahorros</option>
+          </select>
+          <select id="filter-person" class="filter-chip" onchange="renderTransactions()">
+            <option value="">Ambos</option>
+            <option value="person1" id="fp1">Yo</option>
+            <option value="person2" id="fp2">Mi Amor</option>
+          </select>
+          <select id="filter-category" class="filter-chip" onchange="renderTransactions()">
+            <option value="">Categoría</option>
+          </select>
+          <select id="filter-month" class="filter-chip" onchange="renderTransactions()">
+            <option value="">Mes</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="tx-summary-bar" class="tx-summary-bar"></div>
+      <div id="transactions-list" class="tx-list"></div>
+    </div>
+
+    <!-- ===== CALENDAR ===== -->
+    <div id="page-calendar" class="page">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="changeMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+        <div>
+          <h2 id="cal-title">Julio 2026</h2>
+          <p class="cal-month-summary" id="cal-month-summary"></p>
+        </div>
+        <button class="cal-nav-btn" onclick="changeMonth(1)"><i class="fas fa-chevron-right"></i></button>
+      </div>
+
+      <div class="cal-legend">
+        <span class="cal-dot income-bg"></span>Ingreso
+        <span class="cal-dot expense-bg"></span>Gasto
+        <span class="cal-dot savings-bg"></span>Ahorro
+      </div>
+
+      <div class="cal-weekdays">
+        <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
+      </div>
+      <div id="cal-grid" class="cal-grid"></div>
+
+      <div id="cal-day-detail" class="cal-day-detail hidden">
+        <div class="cal-day-detail-header">
+          <h4 id="cal-day-title">Día</h4>
+          <button class="close-btn" onclick="closeDayDetail()"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="cal-day-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== GOALS ===== -->
+    <div id="page-goals" class="page">
+      <div class="page-header">
+        <h2>Metas de Ahorro</h2>
+        <button class="btn-fab" onclick="openGoalModal()"><i class="fas fa-plus"></i></button>
+      </div>
+
+      <div id="goals-container"></div>
+
+      <div id="no-goals" class="empty-state hidden">
+        <div class="empty-emoji">🎯</div>
+        <h3>Sin metas todavía</h3>
+        <p>Crea tu primera meta de ahorro juntos</p>
+        <button class="btn-primary" onclick="openGoalModal()">Crear meta</button>
+      </div>
+    </div>
+
+    <!-- ===== REPORTS ===== -->
+    <div id="page-reports" class="page">
+      <h2>Reportes</h2>
+
+      <div class="report-period-row">
+        <select id="rep-month" class="filter-chip" onchange="renderReports()"></select>
+        <select id="rep-year" class="filter-chip" onchange="renderReports()"></select>
+      </div>
+
+      <div id="rep-kpis" class="kpi-grid"></div>
+
+      <div class="card">
+        <div class="card-hdr"><h3>Gastos por Categoría</h3></div>
+        <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+        <div id="cat-legend" class="cat-legend"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3>Últimos 6 Meses</h3></div>
+        <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3>Por persona</h3></div>
+        <div id="person-stats"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3>Presupuesto por Categoría</h3></div>
+        <div id="budget-progress"></div>
+        <button class="btn-secondary full-width" style="margin-top:12px" onclick="openBudgetModal()">
+          <i class="fas fa-edit"></i> Editar presupuestos
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3>Exportar / Importar</h3></div>
+        <div class="export-row">
+          <button class="btn-secondary" onclick="exportJSON()"><i class="fas fa-download"></i> JSON</button>
+          <button class="btn-secondary" onclick="exportCSV()"><i class="fas fa-file-alt"></i> CSV</button>
+          <label class="btn-secondary" style="cursor:pointer">
+            <i class="fas fa-upload"></i> Importar
+            <input type="file" accept=".json" onchange="importJSON(event)" style="display:none">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SETTINGS ===== -->
+    <div id="page-settings" class="page">
+      <h2>Ajustes</h2>
+
+      <div class="card">
+        <div class="card-hdr"><h3><i class="fas fa-users"></i> Pareja</h3></div>
+        <div class="settings-form">
+          <div class="form-group">
+            <label>Tu nombre</label>
+            <input type="text" id="s-p1" class="form-input" placeholder="Tu nombre">
+          </div>
+          <div class="form-group">
+            <label>Nombre de tu pareja 💕</label>
+            <input type="text" id="s-p2" class="form-input" placeholder="Su nombre">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3><i class="fas fa-dollar-sign"></i> Moneda</h3></div>
+        <div class="settings-form">
+          <div class="form-group">
+            <label>Símbolo</label>
+            <select id="s-currency" class="form-input">
+              <option value="$">$ Pesos colombianos</option>
+              <option value="USD ">USD Dólares</option>
+              <option value="€">€ Euros</option>
+              <option value="S/ ">S/ Soles</option>
+              <option value="MXN ">MXN Pesos mexicanos</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr"><h3><i class="fas fa-bell"></i> Recordatorios</h3></div>
+        <div class="settings-form">
+          <div class="form-group">
+            <label>Ingreso mensual esperado</label>
+            <input type="number" id="s-income" class="form-input" placeholder="0" min="0">
+          </div>
+          <div class="form-group">
+            <label>Meta de ahorro mensual (%)</label>
+            <input type="number" id="s-savings-pct" class="form-input" placeholder="20" min="0" max="100">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-primary full-width" onclick="saveSettings()">
+        <i class="fas fa-save"></i> Guardar Ajustes
+      </button>
+
+      <div class="card danger-zone">
+        <div class="card-hdr"><h3><i class="fas fa-exclamation-triangle"></i> Zona de Peligro</h3></div>
+        <button class="btn-danger full-width" onclick="clearAll()">
+          <i class="fas fa-trash"></i> Borrar todos los datos
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+      <i class="fas fa-home"></i>
+      <span>Inicio</span>
+    </button>
+    <button class="nav-item" data-page="transactions" onclick="showPage('transactions')">
+      <i class="fas fa-list"></i>
+      <span>Movimientos</span>
+    </button>
+    <button class="nav-item" data-page="calendar" onclick="showPage('calendar')">
+      <i class="fas fa-calendar-alt"></i>
+      <span>Calendario</span>
+    </button>
+    <button class="nav-item" data-page="goals" onclick="showPage('goals')">
+      <i class="fas fa-bullseye"></i>
+      <span>Metas</span>
+    </button>
+    <button class="nav-item" data-page="reports" onclick="showPage('reports')">
+      <i class="fas fa-chart-pie"></i>
+      <span>Reportes</span>
+    </button>
+    <button class="nav-item" data-page="settings" onclick="showPage('settings')">
+      <i class="fas fa-cog"></i>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+
+  <!-- ===== MODAL: TRANSACTION ===== -->
+  <div id="modal-tx" class="modal-overlay hidden">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-hdr" id="modal-tx-hdr">
+        <div class="modal-type-tabs">
+          <button class="mtype-tab active" data-type="income" onclick="switchTxType('income')">
+            <i class="fas fa-arrow-down"></i> Ingreso
+          </button>
+          <button class="mtype-tab" data-type="expense" onclick="switchTxType('expense')">
+            <i class="fas fa-arrow-up"></i> Gasto
+          </button>
+          <button class="mtype-tab" data-type="savings" onclick="switchTxType('savings')">
+            <i class="fas fa-piggy-bank"></i> Ahorro
+          </button>
+        </div>
+        <button class="close-btn" onclick="closeTxModal()"><i class="fas fa-times"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="tx-edit-id">
+
+        <div class="amount-big-input">
+          <span id="tx-currency-sym">$</span>
+          <input type="number" id="tx-amount" placeholder="0" min="0" step="any" inputmode="decimal">
+        </div>
+
+        <div class="form-group" id="tx-category-group">
+          <label>Categoría</label>
+          <div id="tx-cat-grid" class="cat-grid"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Descripción</label>
+          <input type="text" id="tx-desc" class="form-input" placeholder="¿En qué?">
+        </div>
+
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="tx-date" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label>¿Quién?</label>
+          <div class="person-tabs">
+            <button type="button" class="person-tab active" data-p="person1" onclick="selectPerson(this)">
+              <i class="fas fa-user"></i> <span id="ptab-p1">Yo</span>
+            </button>
+            <button type="button" class="person-tab" data-p="person2" onclick="selectPerson(this)">
+              <i class="fas fa-heart"></i> <span id="ptab-p2">Mi Amor</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" id="tx-recurring-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="tx-recurring"> Gasto recurrente mensual
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeTxModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveTx()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: GOAL ===== -->
+  <div id="modal-goal" class="modal-overlay hidden">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-hdr">
+        <h3 id="goal-modal-title">Nueva Meta</h3>
+        <button class="close-btn" onclick="closeGoalModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="goal-edit-id">
+
+        <div class="form-group">
+          <label>Nombre de la meta</label>
+          <input type="text" id="goal-name" class="form-input" placeholder="Ej: Viaje a la playa">
+        </div>
+
+        <div class="form-group">
+          <label>Ícono</label>
+          <div class="icon-grid" id="goal-icon-grid">
+            <button type="button" class="icon-btn active" data-icon="🎯">🎯</button>
+            <button type="button" class="icon-btn" data-icon="🏠">🏠</button>
+            <button type="button" class="icon-btn" data-icon="🚗">🚗</button>
+            <button type="button" class="icon-btn" data-icon="✈️">✈️</button>
+            <button type="button" class="icon-btn" data-icon="📱">📱</button>
+            <button type="button" class="icon-btn" data-icon="💍">💍</button>
+            <button type="button" class="icon-btn" data-icon="🎓">🎓</button>
+            <button type="button" class="icon-btn" data-icon="🏖️">🏖️</button>
+            <button type="button" class="icon-btn" data-icon="💻">💻</button>
+            <button type="button" class="icon-btn" data-icon="🏦">🏦</button>
+            <button type="button" class="icon-btn" data-icon="🎮">🎮</button>
+            <button type="button" class="icon-btn" data-icon="💝">💝</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Meta de ahorro</label>
+          <div class="amount-input-row">
+            <span class="curr-sym" id="goal-curr">$</span>
+            <input type="number" id="goal-target" class="form-input" placeholder="0" min="0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Fecha límite (opcional)</label>
+          <input type="date" id="goal-deadline" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label>Notas</label>
+          <input type="text" id="goal-notes" class="form-input" placeholder="Por qué es importante...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeGoalModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveGoal()">Guardar Meta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: CONTRIBUTE ===== -->
+  <div id="modal-contrib" class="modal-overlay hidden">
+    <div class="modal modal-sm" onclick="event.stopPropagation()">
+      <div class="modal-hdr">
+        <h3>Agregar a Meta</h3>
+        <button class="close-btn" onclick="closeContribModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="contrib-goal-id">
+        <div id="contrib-goal-info" class="contrib-goal-info"></div>
+        <div class="form-group">
+          <label>¿Cuánto agregas hoy?</label>
+          <div class="amount-input-row">
+            <span class="curr-sym" id="contrib-curr">$</span>
+            <input type="number" id="contrib-amount" class="form-input" placeholder="0" min="0" inputmode="decimal">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>¿Quién aporta?</label>
+          <div class="person-tabs">
+            <button type="button" class="person-tab active" data-p="person1" onclick="selectPerson(this)">
+              <i class="fas fa-user"></i> <span id="cptab-p1">Yo</span>
+            </button>
+            <button type="button" class="person-tab" data-p="person2" onclick="selectPerson(this)">
+              <i class="fas fa-heart"></i> <span id="cptab-p2">Mi Amor</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeContribModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveContrib()">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: BUDGET ===== -->
+  <div id="modal-budget" class="modal-overlay hidden">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-hdr">
+        <h3>Presupuesto Mensual</h3>
+        <button class="close-btn" onclick="closeBudgetModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="muted-text">Establece cuánto quieres gastar por categoría cada mes. Te avisaremos cuando estés cerca del límite.</p>
+        <div id="budget-form-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeBudgetModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveBudgets()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
