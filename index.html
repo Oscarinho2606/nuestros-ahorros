@@ -66,6 +66,9 @@
         </button>
       </div>
 
+      <!-- Pending payments alert -->
+      <div id="pending-alert" class="pending-alert hidden" onclick="showPage('pending')"></div>
+
       <!-- Budget alert bar -->
       <div id="budget-alert" class="budget-alert hidden"></div>
 
@@ -216,6 +219,46 @@
       </div>
     </div>
 
+    <!-- ===== PENDING PAYMENTS ===== -->
+    <div id="page-pending" class="page">
+      <div class="page-header">
+        <h2>Pagos Pendientes</h2>
+        <button class="btn-fab" onclick="openPendingModal()"><i class="fas fa-plus"></i></button>
+      </div>
+
+      <div id="pending-overdue" class="pending-group hidden">
+        <div class="pending-group-title overdue-title"><i class="fas fa-exclamation-circle"></i> Vencidos</div>
+        <div id="pending-overdue-list"></div>
+      </div>
+
+      <div id="pending-today" class="pending-group hidden">
+        <div class="pending-group-title today-title"><i class="fas fa-bell"></i> Vencen hoy</div>
+        <div id="pending-today-list"></div>
+      </div>
+
+      <div id="pending-upcoming" class="pending-group hidden">
+        <div class="pending-group-title upcoming-title"><i class="fas fa-calendar-alt"></i> Próximos 7 días</div>
+        <div id="pending-upcoming-list"></div>
+      </div>
+
+      <div id="pending-future" class="pending-group hidden">
+        <div class="pending-group-title future-title"><i class="fas fa-clock"></i> Más adelante</div>
+        <div id="pending-future-list"></div>
+      </div>
+
+      <div id="pending-paid" class="pending-group hidden">
+        <div class="pending-group-title paid-title"><i class="fas fa-check-circle"></i> Pagados este mes</div>
+        <div id="pending-paid-list"></div>
+      </div>
+
+      <div id="no-pending" class="empty-state hidden">
+        <div class="empty-emoji">✅</div>
+        <h3>Sin pagos pendientes</h3>
+        <p>Agrega tus cuentas por pagar para no olvidarlas</p>
+        <button class="btn-primary" onclick="openPendingModal()">Agregar pago</button>
+      </div>
+    </div>
+
     <!-- ===== SETTINGS ===== -->
     <div id="page-settings" class="page">
       <h2>Ajustes</h2>
@@ -295,6 +338,11 @@
     <button class="nav-item" data-page="goals" onclick="showPage('goals')">
       <i class="fas fa-bullseye"></i>
       <span>Metas</span>
+    </button>
+    <button class="nav-item" data-page="pending" onclick="showPage('pending')">
+      <i class="fas fa-clock"></i>
+      <span>Pagos</span>
+      <span id="pending-badge" class="nav-badge hidden"></span>
     </button>
     <button class="nav-item" data-page="reports" onclick="showPage('reports')">
       <i class="fas fa-chart-pie"></i>
@@ -481,6 +529,78 @@
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeBudgetModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveBudgets()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: PENDING PAYMENT ===== -->
+  <div id="modal-pending" class="modal-overlay hidden">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-hdr">
+        <h3 id="pending-modal-title">Nuevo Pago Pendiente</h3>
+        <button class="close-btn" onclick="closePendingModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="pending-edit-id">
+        <div class="form-group">
+          <label>¿Qué debes pagar?</label>
+          <input type="text" id="pending-name" class="form-input" placeholder="Ej: Arriendo, Netflix, Celular...">
+        </div>
+        <div class="form-group">
+          <label>Monto</label>
+          <div class="amount-input-row">
+            <span class="curr-sym" id="pending-curr">$</span>
+            <input type="number" id="pending-amount" class="form-input" placeholder="0" min="0" inputmode="decimal">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <div id="pending-cat-grid" class="cat-grid"></div>
+        </div>
+        <div class="form-group">
+          <label>Fecha límite de pago</label>
+          <input type="date" id="pending-date" class="form-input">
+        </div>
+        <div class="form-group">
+          <label>¿Quién paga?</label>
+          <div class="person-tabs">
+            <button type="button" class="person-tab active" data-p="person1" onclick="selectPerson(this)">
+              <i class="fas fa-user"></i> <span id="pp1">Yo</span>
+            </button>
+            <button type="button" class="person-tab" data-p="person2" onclick="selectPerson(this)">
+              <i class="fas fa-heart"></i> <span id="pp2">Mi Amor</span>
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="pending-recurring"> Se repite cada mes
+          </label>
+        </div>
+        <div class="form-group">
+          <label>Notas (opcional)</label>
+          <input type="text" id="pending-notes" class="form-input" placeholder="Ej: Vence el 5 de cada mes">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closePendingModal()">Cancelar</button>
+        <button class="btn-primary" onclick="savePending()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: SAVINGS PLAN ===== -->
+  <div id="modal-savings-plan" class="modal-overlay hidden">
+    <div class="modal modal-sm" onclick="event.stopPropagation()">
+      <div class="modal-hdr">
+        <h3>💡 Plan de tu pago</h3>
+        <button class="close-btn" onclick="document.getElementById('modal-savings-plan').classList.add('hidden')"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div id="savings-plan-content"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary full-width" onclick="document.getElementById('modal-savings-plan').classList.add('hidden')">Entendido 👍</button>
       </div>
     </div>
   </div>

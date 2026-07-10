@@ -56,6 +56,9 @@ let calYear  = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let selectedCalDay = null;
 
+// Pending payments state
+state.pendingPayments = [];
+
 // Chart instances
 let chartCategory = null;
 let chartMonthly  = null;
@@ -74,19 +77,21 @@ function setConn(status) {
 
 // ===== SUPABASE DB OPERATIONS =====
 async function loadAll() {
-  const [txRes, goalRes, budgetRes, settingsRes] = await Promise.all([
+  const [txRes, goalRes, budgetRes, settingsRes, pendingRes] = await Promise.all([
     db.from('transactions').select('*').order('date', { ascending: false }).order('created_at', { ascending: false }),
     db.from('goals').select('*, contributions(*)').order('created_at', { ascending: true }),
     db.from('budgets').select('*'),
     db.from('settings').select('*').eq('id', 'singleton').maybeSingle(),
+    db.from('pending_payments').select('*').order('due_date', { ascending: true }),
   ]);
 
-  if (txRes.error)       throw txRes.error;
-  if (goalRes.error)     throw goalRes.error;
+  if (txRes.error)   throw txRes.error;
+  if (goalRes.error) throw goalRes.error;
 
-  state.transactions = txRes.data || [];
-  state.goals        = goalRes.data || [];
-  state.budgets      = {};
+  state.transactions    = txRes.data || [];
+  state.goals           = goalRes.data || [];
+  state.pendingPayments = pendingRes.data || [];
+  state.budgets = {};
   (budgetRes.data || []).forEach(b => { state.budgets[b.category] = Number(b.amount); });
   if (settingsRes.data) state.settings = settingsRes.data;
 }
@@ -182,6 +187,13 @@ function setupRealtime() {
       state.goals = data || [];
       renderCurrentPage();
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_payments' }, async () => {
+      const { data } = await db.from('pending_payments').select('*').order('due_date', { ascending: true });
+      state.pendingPayments = data || [];
+      updatePendingBadge();
+      renderPendingAlert();
+      renderCurrentPage();
+    })
     .subscribe(status => {
       if (status === 'SUBSCRIBED') setConn('online');
       if (status === 'CLOSED' || status === 'CHANNEL_ERROR') setConn('offline');
@@ -224,6 +236,7 @@ function renderCurrentPage() {
   if (id === 'calendar')     renderCalendar();
   if (id === 'goals')        renderGoals();
   if (id === 'reports')      renderReports();
+  if (id === 'pending')      renderPending();
 }
 
 // ===== CALCULATIONS =====
@@ -260,6 +273,7 @@ function showPage(name) {
   if (name === 'goals')        renderGoals();
   if (name === 'reports')      renderReports();
   if (name === 'settings')     renderSettings();
+  if (name === 'pending')      renderPending();
   window.scrollTo(0, 0);
 }
 
@@ -822,6 +836,7 @@ async function saveTx() {
     renderDashboard();
     const label = currentTxType === 'income' ? 'Ingreso' : currentTxType === 'savings' ? 'Ahorro' : 'Gasto';
     showToast(`✅ ${label} guardado`);
+    if (currentTxType === 'income') showSavingsPlan(amount);
     setTimeout(() => suppressRealtimeToast = false, 2000);
   } catch(e) {
     showToast('❌ Error al guardar');
@@ -1050,6 +1065,303 @@ async function importJSON(event) {
   event.target.value = '';
 }
 
+// ===== PENDING PAYMENTS =====
+function pendingDaysDiff(dueDateStr) {
+  const due   = new Date(dueDateStr + 'T12:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((due - today) / 86400000);
+}
+
+function pendingChip(diff, paid) {
+  if (paid)       return `<span class="due-chip paid"><i class="fas fa-check"></i> Pagado</span>`;
+  if (diff < 0)   return `<span class="due-chip overdue"><i class="fas fa-exclamation"></i> ${Math.abs(diff)} días vencido</span>`;
+  if (diff === 0) return `<span class="due-chip today"><i class="fas fa-bell"></i> ¡Vence hoy!</span>`;
+  if (diff <= 7)  return `<span class="due-chip upcoming"><i class="fas fa-calendar"></i> En ${diff} días</span>`;
+  return          `<span class="due-chip future"><i class="fas fa-clock"></i> En ${diff} días</span>`;
+}
+
+function pendingItemHTML(p) {
+  const diff    = pendingDaysDiff(p.due_date);
+  const cls     = p.paid ? 'paid' : diff < 0 ? 'overdue' : diff === 0 ? 'due-today' : diff <= 7 ? 'upcoming' : '';
+  const cat     = getCatInfo('expense', p.category);
+  const actions = p.paid ? '' : `
+    <div class="pending-item-actions">
+      <button class="pay-btn" onclick="markPaid('${p.id}')"><i class="fas fa-check"></i> Marcar como pagado</button>
+      <button class="pending-edit-btn" onclick="editPending('${p.id}')"><i class="fas fa-edit"></i></button>
+      <button class="pending-del-btn"  onclick="deletePending('${p.id}')"><i class="fas fa-trash"></i></button>
+    </div>`;
+  return `<div class="pending-item ${cls}">
+    <div class="pending-item-top">
+      <div>
+        <div class="pending-item-name">${cat.emoji} ${p.name}</div>
+        <div class="pending-item-meta">
+          ${pendingChip(diff, p.paid)}
+          <span>${fmtDate(p.due_date)}</span>
+          <span class="tx-person-badge">${personLabel(p.person)}</span>
+          ${p.recurring ? '<span class="tx-recurring-badge">🔄 mensual</span>' : ''}
+        </div>
+        ${p.notes ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">💭 ${p.notes}</div>` : ''}
+      </div>
+      <div class="pending-item-amount ${p.paid ? 'paid' : ''}">${fmt(p.amount)}</div>
+    </div>
+    ${actions}
+  </div>`;
+}
+
+function renderPending() {
+  const all      = state.pendingPayments;
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const thisMonth= all.filter(p => p.paid && new Date(p.paid_at) >= new Date(today.getFullYear(), today.getMonth(), 1));
+
+  const overdue  = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) < 0);
+  const dueToday = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) === 0);
+  const upcoming = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) > 0 && pendingDaysDiff(p.due_date) <= 7);
+  const future   = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) > 7);
+
+  const setGroup = (groupId, listId, items) => {
+    document.getElementById(groupId).classList.toggle('hidden', items.length === 0);
+    document.getElementById(listId).innerHTML = items.map(pendingItemHTML).join('');
+  };
+  setGroup('pending-overdue',  'pending-overdue-list',  overdue);
+  setGroup('pending-today',    'pending-today-list',    dueToday);
+  setGroup('pending-upcoming', 'pending-upcoming-list', upcoming);
+  setGroup('pending-future',   'pending-future-list',   future);
+  setGroup('pending-paid',     'pending-paid-list',     thisMonth);
+
+  const hasAny = overdue.length + dueToday.length + upcoming.length + future.length + thisMonth.length > 0;
+  document.getElementById('no-pending').classList.toggle('hidden', hasAny);
+}
+
+function renderPendingAlert() {
+  const alertEl  = document.getElementById('pending-alert');
+  if (!alertEl) return;
+  const overdue  = state.pendingPayments.filter(p => !p.paid && pendingDaysDiff(p.due_date) < 0);
+  const dueToday = state.pendingPayments.filter(p => !p.paid && pendingDaysDiff(p.due_date) === 0);
+  const urgent   = [...overdue, ...dueToday];
+
+  if (urgent.length === 0) { alertEl.classList.add('hidden'); return; }
+
+  const total = urgent.reduce((s, p) => s + Number(p.amount), 0);
+  const overdueText  = overdue.length  > 0 ? `${overdue.length} vencido${overdue.length > 1 ? 's' : ''}` : '';
+  const todayText    = dueToday.length > 0 ? `${dueToday.length} vence${dueToday.length > 1 ? 'n' : ''} hoy` : '';
+  const subtitle     = [overdueText, todayText].filter(Boolean).join(' · ');
+
+  alertEl.classList.remove('hidden');
+  alertEl.innerHTML = `
+    <i class="fas fa-bell"></i>
+    <div class="pending-alert-text">
+      <div class="pending-alert-title">⚠️ Tienes pagos urgentes — ${fmt(total)}</div>
+      <div class="pending-alert-sub">${subtitle} · Toca para ver</div>
+    </div>
+    <i class="fas fa-chevron-right"></i>
+  `;
+}
+
+function updatePendingBadge() {
+  const badge  = document.getElementById('pending-badge');
+  if (!badge) return;
+  const urgent = state.pendingPayments.filter(p => !p.paid && pendingDaysDiff(p.due_date) <= 0).length;
+  if (urgent > 0) {
+    badge.textContent = urgent;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+// Pending modal
+function openPendingModal(editId) {
+  document.getElementById('modal-pending').classList.remove('hidden');
+  document.getElementById('pending-edit-id').value = editId || '';
+  document.getElementById('pending-modal-title').textContent = editId ? 'Editar Pago' : 'Nuevo Pago Pendiente';
+
+  if (editId) {
+    const p = state.pendingPayments.find(p => p.id === editId);
+    if (!p) return;
+    document.getElementById('pending-name').value      = p.name;
+    document.getElementById('pending-amount').value    = p.amount;
+    document.getElementById('pending-date').value      = p.due_date;
+    document.getElementById('pending-notes').value     = p.notes || '';
+    document.getElementById('pending-recurring').checked = p.recurring;
+    buildPendingCatGrid(p.category);
+    const personBtn = document.querySelector(`#modal-pending .person-tab[data-p="${p.person}"]`);
+    if (personBtn) { resetPersonTabs(document.querySelector('#modal-pending .person-tab')); personBtn.classList.add('active'); }
+  } else {
+    document.getElementById('pending-name').value   = '';
+    document.getElementById('pending-amount').value = '';
+    document.getElementById('pending-date').value   = todayStr();
+    document.getElementById('pending-notes').value  = '';
+    document.getElementById('pending-recurring').checked = false;
+    buildPendingCatGrid();
+    resetPersonTabs(document.querySelector('#modal-pending .person-tab'));
+  }
+  updateCurrencySymbols();
+  document.getElementById('pending-curr').textContent = state.settings.currency;
+  updatePersonLabels();
+}
+
+function buildPendingCatGrid(activeCat) {
+  document.getElementById('pending-cat-grid').innerHTML = EXPENSE_CATS.map((c, i) =>
+    `<button type="button" class="cat-btn ${(activeCat ? c.id === activeCat : i === 0) ? 'active' : ''}" data-cat="${c.id}" onclick="selectCat(this)">
+      <span class="cat-emoji">${c.emoji}</span>${c.label}
+    </button>`).join('');
+}
+
+function closePendingModal() { document.getElementById('modal-pending').classList.add('hidden'); }
+function editPending(id)     { openPendingModal(id); }
+
+async function savePending() {
+  const name   = document.getElementById('pending-name').value.trim();
+  const amount = parseFloat(document.getElementById('pending-amount').value);
+  const date   = document.getElementById('pending-date').value;
+  if (!name)           { showToast('⚠️ Escribe qué debes pagar'); return; }
+  if (!amount || amount <= 0) { showToast('⚠️ Ingresa el monto'); return; }
+  if (!date)           { showToast('⚠️ Selecciona la fecha límite'); return; }
+
+  const cat    = document.querySelector('#pending-cat-grid .cat-btn.active')?.dataset.cat || 'other';
+  const person = getActivePerson(document.querySelector('#modal-pending .person-tabs'));
+  const data   = {
+    name, amount, category: cat, due_date: date,
+    person, recurring: document.getElementById('pending-recurring').checked,
+    notes: document.getElementById('pending-notes').value.trim(), paid: false,
+  };
+
+  const editId = document.getElementById('pending-edit-id').value;
+  try {
+    suppressRealtimeToast = true;
+    if (editId) {
+      await db.from('pending_payments').update(data).eq('id', editId);
+      const idx = state.pendingPayments.findIndex(p => p.id === editId);
+      if (idx >= 0) state.pendingPayments[idx] = { ...state.pendingPayments[idx], ...data };
+    } else {
+      const { data: row, error } = await db.from('pending_payments').insert(data).select().single();
+      if (error) throw error;
+      state.pendingPayments.push(row);
+      state.pendingPayments.sort((a, b) => a.due_date.localeCompare(b.due_date));
+    }
+    closePendingModal();
+    updatePendingBadge();
+    renderPendingAlert();
+    renderPending();
+    showToast('✅ Pago guardado');
+    setTimeout(() => suppressRealtimeToast = false, 2000);
+  } catch(e) {
+    showToast('❌ Error al guardar'); console.error(e);
+    suppressRealtimeToast = false;
+  }
+}
+
+async function markPaid(id) {
+  const p = state.pendingPayments.find(p => p.id === id);
+  if (!p) return;
+  if (!confirm(`¿Marcar "${p.name}" como pagado y registrarlo como gasto?`)) return;
+
+  try {
+    suppressRealtimeToast = true;
+    // Registrar como gasto
+    await dbAddTransaction({
+      type: 'expense', amount: Number(p.amount), category: p.category,
+      description: p.name, date: todayStr(), person: p.person, recurring: false,
+    });
+    // Marcar como pagado
+    await db.from('pending_payments').update({ paid: true, paid_at: new Date().toISOString() }).eq('id', id);
+    const idx = state.pendingPayments.findIndex(x => x.id === id);
+    if (idx >= 0) { state.pendingPayments[idx].paid = true; state.pendingPayments[idx].paid_at = new Date().toISOString(); }
+
+    // Si es recurrente, crear el próximo mes
+    if (p.recurring) {
+      const next = new Date(p.due_date + 'T12:00:00');
+      next.setMonth(next.getMonth() + 1);
+      const nextDate = next.toISOString().split('T')[0];
+      const { data: row } = await db.from('pending_payments').insert({
+        name: p.name, amount: p.amount, category: p.category,
+        due_date: nextDate, person: p.person, recurring: true, notes: p.notes, paid: false,
+      }).select().single();
+      if (row) state.pendingPayments.push(row);
+      state.pendingPayments.sort((a, b) => a.due_date.localeCompare(b.due_date));
+    }
+
+    updatePendingBadge();
+    renderPendingAlert();
+    renderPending();
+    renderDashboard();
+    showToast(`✅ "${p.name}" pagado y registrado como gasto`);
+    setTimeout(() => suppressRealtimeToast = false, 2000);
+  } catch(e) {
+    showToast('❌ Error al marcar como pagado'); console.error(e);
+    suppressRealtimeToast = false;
+  }
+}
+
+async function deletePending(id) {
+  if (!confirm('¿Eliminar este pago pendiente?')) return;
+  try {
+    await db.from('pending_payments').delete().eq('id', id);
+    state.pendingPayments = state.pendingPayments.filter(p => p.id !== id);
+    updatePendingBadge();
+    renderPendingAlert();
+    renderPending();
+    showToast('Pago eliminado');
+  } catch(e) { showToast('❌ Error al eliminar'); }
+}
+
+// ===== SAVINGS PLAN =====
+function showSavingsPlan(incomeAmount) {
+  const pct      = Number(state.settings.savings_pct) || 20;
+  const toSave   = incomeAmount * (pct / 100);
+  const now      = new Date();
+
+  // Pagos pendientes del mes actual que aún no están pagados
+  const pendingThisMonth = state.pendingPayments
+    .filter(p => !p.paid)
+    .filter(p => {
+      const d = new Date(p.due_date + 'T12:00:00');
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+  const totalPending = pendingThisMonth.reduce((s, p) => s + Number(p.amount), 0);
+  const available    = incomeAmount - toSave - totalPending;
+
+  const pendingRows = pendingThisMonth.length > 0
+    ? pendingThisMonth.map(p => `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);padding:4px 0">
+        <span>${getCatInfo('expense', p.category).emoji} ${p.name}</span>
+        <span style="font-weight:600;color:var(--expense)">${fmt(p.amount)}</span>
+      </div>`).join('')
+    : '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Sin pagos pendientes este mes 🎉</div>';
+
+  document.getElementById('savings-plan-content').innerHTML = `
+    <div class="savings-plan-card">
+      <div class="savings-plan-label">Ingreso recibido</div>
+      <div class="savings-plan-income">${fmt(incomeAmount)}</div>
+    </div>
+    <div class="savings-plan-rows">
+      <div class="savings-plan-row">
+        <div class="savings-plan-row-icon">🏦</div>
+        <div class="savings-plan-row-info">
+          <div class="savings-plan-row-label">Ahorra (${pct}%)</div>
+          <div class="savings-plan-row-val savings">${fmt(toSave)}</div>
+        </div>
+      </div>
+      <div class="savings-plan-row">
+        <div class="savings-plan-row-icon">📅</div>
+        <div class="savings-plan-row-info">
+          <div class="savings-plan-row-label">Pagos pendientes este mes</div>
+          <div class="savings-plan-row-val expense">${fmt(totalPending)}</div>
+          <div style="margin-top:6px">${pendingRows}</div>
+        </div>
+      </div>
+      <div class="savings-plan-row" style="background:var(--primary-light)">
+        <div class="savings-plan-row-icon">✅</div>
+        <div class="savings-plan-row-info">
+          <div class="savings-plan-row-label">Disponible para gastar</div>
+          <div class="savings-plan-row-val balance">${fmt(Math.max(0, available))}</div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-savings-plan').classList.remove('hidden');
+}
+
 // ===== MIGRATE FROM LOCALSTORAGE =====
 async function migrateFromLocalStorage() {
   const raw = localStorage.getItem('ahorro-v2') || localStorage.getItem('ahorro-state');
@@ -1144,13 +1456,14 @@ async function migrateFromLocalStorage() {
 }
 
 // ===== MODAL OVERLAY CLOSE =====
-['modal-tx','modal-goal','modal-contrib','modal-budget'].forEach(id => {
+['modal-tx','modal-goal','modal-contrib','modal-budget','modal-pending'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) {
-      if (id === 'modal-tx')     closeTxModal();
-      if (id === 'modal-goal')   closeGoalModal();
-      if (id === 'modal-contrib')closeContribModal();
-      if (id === 'modal-budget') closeBudgetModal();
+      if (id === 'modal-tx')      closeTxModal();
+      if (id === 'modal-goal')    closeGoalModal();
+      if (id === 'modal-contrib') closeContribModal();
+      if (id === 'modal-budget')  closeBudgetModal();
+      if (id === 'modal-pending') closePendingModal();
     }
   });
 });
@@ -1166,6 +1479,8 @@ async function init() {
     setupRealtime();
     updatePersonLabels();
     updateCurrencySymbols();
+    updatePendingBadge();
+    renderPendingAlert();
     renderDashboard();
   } catch(e) {
     setConn('offline');

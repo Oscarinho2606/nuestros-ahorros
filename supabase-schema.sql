@@ -69,3 +69,27 @@ CREATE INDEX IF NOT EXISTS idx_tx_date   ON transactions(date DESC);
 CREATE INDEX IF NOT EXISTS idx_tx_type   ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_tx_person ON transactions(person);
 CREATE INDEX IF NOT EXISTS idx_contrib_goal ON contributions(goal_id);
+
+-- Activar Realtime (cambios en tiempo real entre dispositivos)
+ALTER PUBLICATION supabase_realtime ADD TABLE transactions;
+ALTER PUBLICATION supabase_realtime ADD TABLE goals;
+ALTER PUBLICATION supabase_realtime ADD TABLE contributions;
+ALTER PUBLICATION supabase_realtime ADD TABLE settings;
+
+-- Tabla de pagos pendientes / futuros
+CREATE TABLE IF NOT EXISTS pending_payments (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  amount       DECIMAL(14,2) NOT NULL CHECK (amount > 0),
+  category     TEXT NOT NULL DEFAULT 'other',
+  due_date     TEXT NOT NULL,
+  person       TEXT NOT NULL DEFAULT 'person1',
+  recurring    BOOLEAN DEFAULT FALSE,
+  notes        TEXT DEFAULT '',
+  paid         BOOLEAN DEFAULT FALSE,
+  paid_at      TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE pending_payments DISABLE ROW LEVEL SECURITY;
+ALTER PUBLICATION supabase_realtime ADD TABLE pending_payments;

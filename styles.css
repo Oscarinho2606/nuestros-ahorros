@@ -852,6 +852,137 @@ a { text-decoration: none; color: inherit; }
 .toast.hidden { display: none; }
 @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
+/* ===== NAV BADGE ===== */
+.bottom-nav { overflow-x: auto; }
+.nav-item { position: relative; min-width: 52px; }
+.nav-badge {
+  position: absolute;
+  top: 6px; right: 8px;
+  background: var(--expense);
+  color: white;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 4px;
+}
+
+/* ===== PENDING PAYMENTS ===== */
+.pending-alert {
+  background: linear-gradient(135deg, #DC2626, #EF4444);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+  box-shadow: 0 4px 12px rgba(220,38,38,0.3);
+  animation: alertPulse 2s infinite;
+}
+@keyframes alertPulse { 0%,100%{box-shadow:0 4px 12px rgba(220,38,38,0.3)} 50%{box-shadow:0 4px 20px rgba(220,38,38,0.6)} }
+.pending-alert i { font-size: 20px; flex-shrink: 0; }
+.pending-alert-text { flex: 1; }
+.pending-alert-title { font-weight: 700; font-size: 14px; }
+.pending-alert-sub { font-size: 12px; opacity: 0.9; margin-top: 2px; }
+
+.pending-group { margin-bottom: 16px; }
+.pending-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.overdue-title  { color: var(--expense); }
+.today-title    { color: #D97706; }
+.upcoming-title { color: var(--primary); }
+.future-title   { color: var(--text-muted); }
+.paid-title     { color: var(--income); }
+
+.pending-item {
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+  border-left: 4px solid var(--border);
+  position: relative;
+}
+.pending-item.overdue  { border-left-color: var(--expense); }
+.pending-item.due-today{ border-left-color: #F59E0B; }
+.pending-item.upcoming { border-left-color: var(--primary); }
+.pending-item.paid     { border-left-color: var(--income); opacity: 0.7; }
+
+.pending-item-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.pending-item-name { font-weight: 600; font-size: 15px; }
+.pending-item-amount { font-weight: 700; font-size: 16px; color: var(--expense); }
+.pending-item-amount.paid { color: var(--income); }
+.pending-item-meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.due-chip {
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.due-chip.overdue  { background: var(--expense-bg); color: var(--expense); }
+.due-chip.today    { background: #FEF3C7; color: #92400E; }
+.due-chip.upcoming { background: var(--primary-light); color: var(--primary); }
+.due-chip.future   { background: var(--bg); color: var(--text-muted); }
+.due-chip.paid     { background: var(--income-bg); color: var(--income); }
+
+.pending-item-actions { display: flex; gap: 8px; margin-top: 10px; }
+.pay-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--income);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.pending-edit-btn, .pending-del-btn {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+}
+.pending-edit-btn { background: var(--primary-light); color: var(--primary); }
+.pending-del-btn  { background: var(--expense-bg); color: var(--expense); }
+
+/* ===== SAVINGS PLAN ===== */
+.savings-plan-card {
+  background: linear-gradient(135deg, var(--primary-light), #FCE7F3);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.savings-plan-income { font-size: 28px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.savings-plan-label  { font-size: 12px; color: var(--text-muted); }
+.savings-plan-rows   { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.savings-plan-row {
+  display: flex; align-items: center; gap: 12px;
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+.savings-plan-row-icon { font-size: 22px; flex-shrink: 0; }
+.savings-plan-row-info { flex: 1; }
+.savings-plan-row-label { font-size: 12px; color: var(--text-muted); }
+.savings-plan-row-val   { font-size: 16px; font-weight: 700; }
+.savings-plan-row-val.income  { color: var(--income); }
+.savings-plan-row-val.expense { color: var(--expense); }
+.savings-plan-row-val.savings { color: var(--savings); }
+.savings-plan-row-val.balance { color: var(--primary); }
+
 /* ===== CONNECTION DOT ===== */
 .conn-dot {
   width: 10px; height: 10px;
