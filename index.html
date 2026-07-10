@@ -7,6 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -20,8 +21,19 @@
         <span class="header-subtitle" id="header-date"></span>
       </div>
     </div>
-    <div class="header-balance" id="header-balance">$0</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div id="conn-dot" class="conn-dot conn-connecting" title="Estado de conexión"></div>
+      <div class="header-balance" id="header-balance">$0</div>
+    </div>
   </header>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <p>Cargando datos...</p>
+    </div>
+  </div>
 
   <!-- MAIN CONTENT -->
   <main class="main-content" id="main-content">

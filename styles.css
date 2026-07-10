@@ -852,6 +852,41 @@ a { text-decoration: none; color: inherit; }
 .toast.hidden { display: none; }
 @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
+/* ===== CONNECTION DOT ===== */
+.conn-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.conn-connecting { background: #F59E0B; animation: pulse 1.2s infinite; }
+.conn-online  { background: #10B981; }
+.conn-offline { background: #EF4444; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ===== LOADING OVERLAY ===== */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(240,238,255,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+.loading-overlay.hidden { display: none; }
+.loading-box { text-align: center; }
+.loading-box p { margin-top: 14px; font-size: 14px; color: var(--text-muted); font-weight: 500; }
+.spinner {
+  width: 44px; height: 44px;
+  border: 4px solid var(--primary-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ===== HIDDEN ===== */
 .hidden { display: none !important; }
 
