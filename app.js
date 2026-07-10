@@ -6,8 +6,8 @@
 // ===== SUPABASE CONFIG =====
 // 1. Ve a https://supabase.com → Tu proyecto → Settings → API
 // 2. Copia "Project URL" y "anon public" key y pégalos abajo
-const SUPABASE_URL     = 'https://TU-PROYECTO.supabase.co'; // <-- CAMBIA ESTO
-const SUPABASE_ANON_KEY = 'tu-anon-key-aqui';               // <-- CAMBIA ESTO
+const SUPABASE_URL      = 'https://rlzjezuobijptqqasytq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_-TpSbhCtDYFYAH-AmESmzg_X5fkKBG3';
 
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
