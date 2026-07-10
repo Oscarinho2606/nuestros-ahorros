@@ -983,6 +983,37 @@ a { text-decoration: none; color: inherit; }
 .savings-plan-row-val.savings { color: var(--savings); }
 .savings-plan-row-val.balance { color: var(--primary); }
 
+/* ===== FUTURE WARNING ===== */
+.future-warning {
+  background: #FEF3C7;
+  border-left: 4px solid #F59E0B;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #92400E;
+}
+
+/* ===== GOAL SELECTOR IN TX MODAL ===== */
+.goal-sel-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border: 2px solid transparent;
+  margin-bottom: 6px;
+  transition: all 0.15s;
+}
+.goal-sel-item.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+.goal-sel-icon { font-size: 20px; flex-shrink: 0; }
+.goal-sel-info { flex: 1; min-width: 0; }
+.goal-sel-name { font-weight: 600; font-size: 14px; }
+.goal-sel-progress { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.goal-sel-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.goal-sel-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--primary), var(--secondary)); }
+
 /* ===== CONNECTION DOT ===== */
 .conn-dot {
   width: 10px; height: 10px;

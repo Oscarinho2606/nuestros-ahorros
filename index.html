@@ -392,7 +392,16 @@
 
         <div class="form-group">
           <label>Fecha</label>
-          <input type="date" id="tx-date" class="form-input">
+          <input type="date" id="tx-date" class="form-input" oninput="onTxDateChange()">
+        </div>
+
+        <div id="tx-future-warning" class="future-warning hidden">
+          📅 La fecha es futura — se guardará como <strong>pago pendiente</strong>
+        </div>
+
+        <div class="form-group hidden" id="tx-goal-group">
+          <label>¿A cuál meta va este ahorro?</label>
+          <div id="tx-goal-selector"></div>
         </div>
 
         <div class="form-group">

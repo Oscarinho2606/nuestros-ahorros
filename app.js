@@ -767,7 +767,10 @@ function openTxModal(type) {
   document.getElementById('tx-recurring').checked = false;
   document.querySelectorAll('.mtype-tab').forEach(t => t.classList.toggle('active', t.dataset.type === currentTxType));
   document.getElementById('tx-recurring-group').classList.toggle('hidden', currentTxType !== 'expense');
+  document.getElementById('tx-future-warning').classList.add('hidden');
+  document.getElementById('tx-goal-group').classList.toggle('hidden', currentTxType !== 'savings');
   buildCatGrid(currentTxType);
+  if (currentTxType === 'savings') buildGoalSelector();
   resetPersonTabs(document.querySelector('#modal-tx .person-tab'));
   updateCurrencySymbols();
   updatePersonLabels();
@@ -780,7 +783,57 @@ function switchTxType(type) {
   currentTxType = type;
   document.querySelectorAll('.mtype-tab').forEach(t => t.classList.toggle('active', t.dataset.type === type));
   document.getElementById('tx-recurring-group').classList.toggle('hidden', type !== 'expense');
+  document.getElementById('tx-future-warning').classList.add('hidden');
+  document.getElementById('tx-goal-group').classList.toggle('hidden', type !== 'savings');
   buildCatGrid(type);
+  if (type === 'savings') buildGoalSelector();
+  if (type !== 'expense') document.getElementById('tx-future-warning').classList.add('hidden');
+}
+
+function onTxDateChange() {
+  if (currentTxType !== 'expense') return;
+  const val = document.getElementById('tx-date').value;
+  if (!val) return;
+  const txDate = new Date(val + 'T12:00:00');
+  const today  = new Date(); today.setHours(0, 0, 0, 0);
+  document.getElementById('tx-future-warning').classList.toggle('hidden', txDate <= today);
+}
+
+function buildGoalSelector() {
+  const container  = document.getElementById('tx-goal-selector');
+  const unfinished = state.goals.filter(g => Number(g.current_amount) < Number(g.target_amount));
+
+  if (unfinished.length === 0) {
+    container.innerHTML = '<div class="goal-sel-item active" data-goal-id="" onclick="selectGoalItem(this)"><div class="goal-sel-icon">💰</div><div class="goal-sel-info"><div class="goal-sel-name">Sin meta específica</div></div></div><div style="font-size:12px;color:var(--text-muted);padding:4px">Crea una meta primero para asignar el ahorro</div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="goal-sel-item active" data-goal-id="" onclick="selectGoalItem(this)">
+      <div class="goal-sel-icon">💰</div>
+      <div class="goal-sel-info"><div class="goal-sel-name">Sin meta específica</div></div>
+    </div>
+    ${unfinished.map(g => {
+      const pct = Math.min(100, Math.round((Number(g.current_amount) / Number(g.target_amount)) * 100));
+      return `<div class="goal-sel-item" data-goal-id="${g.id}" onclick="selectGoalItem(this)">
+        <div class="goal-sel-icon">${g.icon}</div>
+        <div class="goal-sel-info">
+          <div class="goal-sel-name">${g.name}</div>
+          <div class="goal-sel-progress">${fmt(g.current_amount)} de ${fmt(g.target_amount)} · ${pct}%</div>
+          <div class="goal-sel-bar"><div class="goal-sel-bar-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function selectGoalItem(el) {
+  document.querySelectorAll('#tx-goal-selector .goal-sel-item').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function getSelectedGoalId() {
+  return document.querySelector('#tx-goal-selector .goal-sel-item.active')?.dataset.goalId || null;
 }
 
 function buildCatGrid(type) {
@@ -819,25 +872,78 @@ async function saveTx() {
   const amount = parseFloat(document.getElementById('tx-amount').value);
   if (!amount || amount <= 0) { showToast('⚠️ Ingresa un monto válido'); return; }
 
-  const data = {
-    type:        currentTxType,
-    amount,
-    category:    getActiveCat(),
-    description: document.getElementById('tx-desc').value.trim(),
-    date:        document.getElementById('tx-date').value || todayStr(),
-    person:      getActivePerson(document.querySelector('#modal-tx .person-tabs')),
-    recurring:   document.getElementById('tx-recurring').checked,
-  };
+  const date   = document.getElementById('tx-date').value || todayStr();
+  const cat    = getActiveCat();
+  const desc   = document.getElementById('tx-desc').value.trim();
+  const person = getActivePerson(document.querySelector('#modal-tx .person-tabs'));
 
   try {
     suppressRealtimeToast = true;
-    await dbAddTransaction(data);
+
+    // Gasto con fecha futura → va automáticamente a Pagos Pendientes
+    if (currentTxType === 'expense') {
+      const txDate = new Date(date + 'T12:00:00');
+      const today  = new Date(); today.setHours(0, 0, 0, 0);
+      if (txDate > today) {
+        const { data: row, error } = await db.from('pending_payments').insert({
+          name:      desc || getCatInfo('expense', cat).label,
+          amount, category: cat, due_date: date,
+          person, recurring: document.getElementById('tx-recurring').checked,
+          notes: '', paid: false,
+        }).select().single();
+        if (error) throw error;
+        state.pendingPayments.push(row);
+        state.pendingPayments.sort((a, b) => a.due_date.localeCompare(b.due_date));
+        closeTxModal();
+        updatePendingBadge();
+        renderPendingAlert();
+        renderDashboard();
+        showToast('📅 Guardado como pago pendiente');
+        setTimeout(() => suppressRealtimeToast = false, 2000);
+        return;
+      }
+    }
+
+    // Ahorro → registra el movimiento y también contribuye a la meta seleccionada
+    if (currentTxType === 'savings') {
+      const goalId = getSelectedGoalId();
+      await dbAddTransaction({ type: 'savings', amount, category: cat, description: desc, date, person, recurring: false });
+
+      if (goalId) {
+        const g = state.goals.find(g => g.id === goalId);
+        if (g) {
+          const newAmount = Number(g.current_amount) + amount;
+          await db.from('goals').update({ current_amount: newAmount }).eq('id', goalId);
+          await db.from('contributions').insert({ goal_id: goalId, amount, person, date });
+          g.current_amount = newAmount;
+          if (!g.contributions) g.contributions = [];
+          g.contributions.push({ goal_id: goalId, amount, person, date, created_at: new Date().toISOString() });
+          closeTxModal();
+          renderDashboard();
+          if (newAmount >= Number(g.target_amount)) {
+            showToast('🎉 ¡Meta cumplida! ¡Lo lograron juntos!', 4000);
+          } else {
+            showToast(`✅ +${fmt(amount)} ahorrado → ${g.icon} ${g.name}`);
+          }
+          setTimeout(() => suppressRealtimeToast = false, 2000);
+          return;
+        }
+      }
+      closeTxModal();
+      renderDashboard();
+      showToast('✅ Ahorro guardado');
+      setTimeout(() => suppressRealtimeToast = false, 2000);
+      return;
+    }
+
+    // Ingreso o gasto de hoy/pasado → movimiento normal
+    await dbAddTransaction({ type: currentTxType, amount, category: cat, description: desc, date, person, recurring: currentTxType === 'expense' && document.getElementById('tx-recurring').checked });
     closeTxModal();
     renderDashboard();
-    const label = currentTxType === 'income' ? 'Ingreso' : currentTxType === 'savings' ? 'Ahorro' : 'Gasto';
-    showToast(`✅ ${label} guardado`);
+    showToast(`✅ ${currentTxType === 'income' ? 'Ingreso' : 'Gasto'} guardado`);
     if (currentTxType === 'income') showSavingsPlan(amount);
     setTimeout(() => suppressRealtimeToast = false, 2000);
+
   } catch(e) {
     showToast('❌ Error al guardar');
     console.error(e);
