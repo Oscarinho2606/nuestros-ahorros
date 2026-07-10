@@ -1205,15 +1205,25 @@ function pendingChip(diff, paid) {
 }
 
 function pendingItemHTML(p) {
-  const diff    = pendingDaysDiff(p.due_date);
-  const cls     = p.paid ? 'paid' : diff < 0 ? 'overdue' : diff === 0 ? 'due-today' : diff <= 7 ? 'upcoming' : '';
-  const cat     = getCatInfo('expense', p.category);
-  const actions = p.paid ? '' : `
-    <div class="pending-item-actions">
+  const diff = pendingDaysDiff(p.due_date);
+  const cls  = p.paid ? 'paid' : diff < 0 ? 'overdue' : diff === 0 ? 'due-today' : diff <= 7 ? 'upcoming' : '';
+  const cat  = getCatInfo('expense', p.category);
+
+  let actions = '';
+  if (p.paid) {
+    actions = '';
+  } else if (p.from_tx) {
+    // Viene de movimientos — ya está registrado como gasto
+    actions = `<div style="font-size:12px;color:var(--income);padding:6px 0;display:flex;align-items:center;gap:6px">
+      <i class="fas fa-check-circle"></i> Ya registrado en movimientos
+    </div>`;
+  } else {
+    actions = `<div class="pending-item-actions">
       <button class="pay-btn" onclick="markPaid('${p.id}')"><i class="fas fa-check"></i> Marcar como pagado</button>
       <button class="pending-edit-btn" onclick="editPending('${p.id}')"><i class="fas fa-edit"></i></button>
       <button class="pending-del-btn"  onclick="deletePending('${p.id}')"><i class="fas fa-trash"></i></button>
     </div>`;
+  }
   return `<div class="pending-item ${cls}">
     <div class="pending-item-top">
       <div>
@@ -1233,14 +1243,38 @@ function pendingItemHTML(p) {
 }
 
 function renderPending() {
-  const all      = state.pendingPayments;
-  const today    = new Date(); today.setHours(0,0,0,0);
-  const thisMonth= all.filter(p => p.paid && new Date(p.paid_at) >= new Date(today.getFullYear(), today.getMonth(), 1));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
 
-  const overdue  = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) < 0);
-  const dueToday = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) === 0);
-  const upcoming = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) > 0 && pendingDaysDiff(p.due_date) <= 7);
-  const future   = all.filter(p => !p.paid && pendingDaysDiff(p.due_date) > 7);
+  // Gastos con fecha futura que ya están en movimientos (no en pending_payments)
+  const futureTxs = state.transactions
+    .filter(tx => {
+      if (tx.type !== 'expense') return false;
+      const d = new Date(tx.date + 'T12:00:00');
+      return d > today;
+    })
+    .map(tx => ({
+      id:         tx.id,
+      name:       tx.description || getCatInfo('expense', tx.category).label,
+      amount:     tx.amount,
+      category:   tx.category,
+      due_date:   tx.date,
+      person:     tx.person,
+      recurring:  tx.recurring,
+      paid:       false,
+      from_tx:    true, // ya está guardado como gasto
+    }));
+
+  // Items de pending_payments sin pagar
+  const pendingItems = state.pendingPayments.filter(p => !p.paid);
+
+  // Unir todo y ordenar por fecha
+  const all = [...pendingItems, ...futureTxs].sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+  const overdue  = all.filter(p => pendingDaysDiff(p.due_date) < 0);
+  const dueToday = all.filter(p => pendingDaysDiff(p.due_date) === 0);
+  const upcoming = all.filter(p => pendingDaysDiff(p.due_date) > 0 && pendingDaysDiff(p.due_date) <= 7);
+  const future   = all.filter(p => pendingDaysDiff(p.due_date) > 7);
+  const paidMonth= state.pendingPayments.filter(p => p.paid && new Date(p.paid_at) >= new Date(today.getFullYear(), today.getMonth(), 1));
 
   const setGroup = (groupId, listId, items) => {
     document.getElementById(groupId).classList.toggle('hidden', items.length === 0);
@@ -1250,9 +1284,9 @@ function renderPending() {
   setGroup('pending-today',    'pending-today-list',    dueToday);
   setGroup('pending-upcoming', 'pending-upcoming-list', upcoming);
   setGroup('pending-future',   'pending-future-list',   future);
-  setGroup('pending-paid',     'pending-paid-list',     thisMonth);
+  setGroup('pending-paid',     'pending-paid-list',     paidMonth);
 
-  const hasAny = overdue.length + dueToday.length + upcoming.length + future.length + thisMonth.length > 0;
+  const hasAny = overdue.length + dueToday.length + upcoming.length + future.length + paidMonth.length > 0;
   document.getElementById('no-pending').classList.toggle('hidden', hasAny);
 }
 
