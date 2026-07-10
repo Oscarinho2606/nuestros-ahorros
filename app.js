@@ -1161,6 +1161,7 @@ async function init() {
   showLoading();
   try {
     await loadAll();
+    await autoMigrateIfNeeded();
     setConn('online');
     setupRealtime();
     updatePersonLabels();
@@ -1182,6 +1183,81 @@ async function init() {
     return;
   }
   hideLoading();
+}
+
+async function autoMigrateIfNeeded() {
+  const raw = localStorage.getItem('ahorro-v2') || localStorage.getItem('ahorro-state');
+  if (!raw) return;
+
+  let old;
+  try { old = JSON.parse(raw); } catch(e) { return; }
+
+  const txCount = old.transactions?.length || 0;
+  const goalCount = old.goals?.length || 0;
+  if (txCount === 0 && goalCount === 0) {
+    localStorage.removeItem('ahorro-v2');
+    localStorage.removeItem('ahorro-state');
+    return;
+  }
+
+  // Migrar transacciones
+  if (old.transactions?.length > 0) {
+    const txs = old.transactions.map(t => ({
+      type:        t.type,
+      amount:      Number(t.amount),
+      category:    t.category || 'other',
+      description: t.description || '',
+      date:        t.date,
+      person:      t.person || 'person1',
+      recurring:   t.recurring || false,
+    }));
+    await db.from('transactions').insert(txs);
+  }
+
+  // Migrar metas
+  for (const g of (old.goals || [])) {
+    const { data: newGoal } = await db.from('goals').insert({
+      name:           g.name,
+      icon:           g.icon || '🎯',
+      target_amount:  Number(g.targetAmount || g.target_amount || 0),
+      current_amount: Number(g.currentAmount || g.current_amount || 0),
+      deadline:       g.deadline || null,
+      notes:          g.notes || '',
+    }).select().single();
+
+    if (newGoal && g.contributions?.length > 0) {
+      const contribs = g.contributions.map(c => ({
+        goal_id: newGoal.id,
+        amount:  Number(c.amount),
+        person:  c.person || 'person1',
+        date:    c.date || new Date().toISOString().split('T')[0],
+      }));
+      await db.from('contributions').insert(contribs);
+    }
+  }
+
+  // Migrar presupuestos
+  if (old.budgets && Object.keys(old.budgets).length > 0) {
+    const rows = Object.entries(old.budgets).map(([category, amount]) => ({ category, amount: Number(amount) }));
+    await db.from('budgets').upsert(rows, { onConflict: 'category' });
+  }
+
+  // Migrar ajustes
+  if (old.settings) {
+    await db.from('settings').upsert({
+      id:              'singleton',
+      person1:         old.settings.person1 || 'Yo',
+      person2:         old.settings.person2 || 'Mi Amor',
+      currency:        old.settings.currency || '$',
+      expected_income: Number(old.settings.expectedIncome || old.settings.expected_income || 0),
+      savings_pct:     Number(old.settings.savingsPct || old.settings.savings_pct || 20),
+    }, { onConflict: 'id' });
+  }
+
+  // Limpiar localStorage y recargar datos desde Supabase
+  localStorage.removeItem('ahorro-v2');
+  localStorage.removeItem('ahorro-state');
+  await loadAll();
 }
 
 document.addEventListener('DOMContentLoaded', init);
