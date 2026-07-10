@@ -764,9 +764,12 @@ function openTxModal(type) {
   document.getElementById('tx-amount').value  = '';
   document.getElementById('tx-desc').value    = '';
   document.getElementById('tx-date').value    = todayStr();
-  document.getElementById('tx-recurring').checked = false;
+  document.getElementById('tx-recurring').checked   = false;
+  document.getElementById('tx-is-pending').checked  = false;
   document.querySelectorAll('.mtype-tab').forEach(t => t.classList.toggle('active', t.dataset.type === currentTxType));
-  document.getElementById('tx-recurring-group').classList.toggle('hidden', currentTxType !== 'expense');
+  const isExp = currentTxType === 'expense';
+  document.getElementById('tx-pending-group').classList.toggle('hidden', !isExp);
+  document.getElementById('tx-recurring-group').classList.toggle('hidden', !isExp);
   document.getElementById('tx-future-warning').classList.add('hidden');
   document.getElementById('tx-goal-group').classList.toggle('hidden', currentTxType !== 'savings');
   buildCatGrid(currentTxType);
@@ -782,12 +785,14 @@ function closeTxModal() { document.getElementById('modal-tx').classList.add('hid
 function switchTxType(type) {
   currentTxType = type;
   document.querySelectorAll('.mtype-tab').forEach(t => t.classList.toggle('active', t.dataset.type === type));
-  document.getElementById('tx-recurring-group').classList.toggle('hidden', type !== 'expense');
+  const isExpense = type === 'expense';
+  document.getElementById('tx-pending-group').classList.toggle('hidden', !isExpense);
+  document.getElementById('tx-recurring-group').classList.toggle('hidden', !isExpense);
   document.getElementById('tx-future-warning').classList.add('hidden');
   document.getElementById('tx-goal-group').classList.toggle('hidden', type !== 'savings');
+  if (!isExpense) document.getElementById('tx-is-pending').checked = false;
   buildCatGrid(type);
   if (type === 'savings') buildGoalSelector();
-  if (type !== 'expense') document.getElementById('tx-future-warning').classList.add('hidden');
 }
 
 function onTxDateChange() {
@@ -796,7 +801,18 @@ function onTxDateChange() {
   if (!val) return;
   const txDate = new Date(val + 'T12:00:00');
   const today  = new Date(); today.setHours(0, 0, 0, 0);
-  document.getElementById('tx-future-warning').classList.toggle('hidden', txDate <= today);
+  const isFuture = txDate > today;
+  if (isFuture) {
+    document.getElementById('tx-is-pending').checked = true;
+    document.getElementById('tx-future-warning').classList.remove('hidden');
+  } else if (!document.getElementById('tx-is-pending').checked) {
+    document.getElementById('tx-future-warning').classList.add('hidden');
+  }
+}
+
+function onPendingToggle() {
+  const checked = document.getElementById('tx-is-pending').checked;
+  document.getElementById('tx-future-warning').classList.toggle('hidden', !checked);
 }
 
 function buildGoalSelector() {
@@ -880,11 +896,12 @@ async function saveTx() {
   try {
     suppressRealtimeToast = true;
 
-    // Gasto con fecha futura → va automáticamente a Pagos Pendientes
+    // Gasto marcado como pendiente O con fecha futura → va a Pagos Pendientes
     if (currentTxType === 'expense') {
-      const txDate = new Date(date + 'T12:00:00');
-      const today  = new Date(); today.setHours(0, 0, 0, 0);
-      if (txDate > today) {
+      const txDate   = new Date(date + 'T12:00:00');
+      const today    = new Date(); today.setHours(0, 0, 0, 0);
+      const isPending = document.getElementById('tx-is-pending').checked || txDate > today;
+      if (isPending) {
         const { data: row, error } = await db.from('pending_payments').insert({
           name:      desc || getCatInfo('expense', cat).label,
           amount, category: cat, due_date: date,
